@@ -8,21 +8,42 @@ import (
 	"os/signal"
 	"time"
 
-	"github.com/uvaldez/go-microservice/microservice-api/handlers"
+	"github.com/go-openapi/runtime/middleware"
+	"github.com/gorilla/mux"
+	"github.com/uvaldez/go-microservice/handlers"
 )
 
 func main() {
 	l := log.New(os.Stdout, "microservice-api ", log.LstdFlags)
 
 	// create the handlers
-	hh := handlers.NewHello(l)
-	gh := handlers.NewGoodbye(l)
+	ph := handlers.NewProducts(l)
 
 	// create a new serve mux and register the handlers
-	sm := http.NewServeMux()
-	sm.Handle("/", hh)
-	sm.Handle("/goodbye", gh)
+	sm := mux.NewRouter()
+	getRouter := sm.Methods(http.MethodGet).Subrouter()
+	getRouter.HandleFunc("/", ph.GetProducts)
 
+	putRouter := sm.Methods(http.MethodPut).Subrouter()
+	putRouter.HandleFunc("/{id:[0-9]+}", ph.UpdateProducts)
+	putRouter.Use(ph.MiddlewareValidateProduct)
+
+	postRouter := sm.Methods(http.MethodPost).Subrouter()
+	postRouter.HandleFunc("/", ph.PostProduct)
+	postRouter.Use(ph.MiddlewareValidateProduct)
+
+	deleteRouter := sm.Methods(http.MethodDelete).Subrouter()
+	deleteRouter.HandleFunc("/{id:[0-9]+}", ph.DeleteProduct)
+
+	// handler for documentation
+	opts := middleware.RedocOpts{SpecURL: "/swagger.yaml"}
+	sh := middleware.Redoc(opts, nil)
+
+	getRouter.Handle("/docs", sh)
+	getRouter.Handle("/swagger.yaml", http.FileServer(http.Dir("./")))
+
+	// CORS
+	// ch := gohandlers.CORS(gohandlers.AllowedOrigins([]string{"*"}))
 	// create a new server
 	s := http.Server{
 		Addr:         ":9090",           // configure the bind address
